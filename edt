@@ -1,0 +1,175 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import random
+from PIL import Image, ImageDraw
+
+class AppliCalendrier:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Emploi du temps de la semaine")
+        
+        self.jours = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+        self.heures_par_jour = 24
+        
+        self.creer_widgets()
+        
+    def creer_widgets(self):
+        self.label_preferences = tk.Label(self.master, text="Préférences de travail :")
+        self.label_preferences.grid(row=0, column=0, columnspan=len(self.jours)+1, padx=10, pady=5)
+        
+        self.preferences = {}
+        for i, jour in enumerate(self.jours):
+            label_jour = tk.Label(self.master, text=jour)
+            label_jour.grid(row=1, column=i+1, padx=10, pady=5)
+            
+            entry_heures = tk.Entry(self.master)
+            entry_heures.grid(row=2, column=i+1, padx=10, pady=5)
+            
+            checkbutton_nuit_var = tk.BooleanVar()
+            checkbutton_nuit = tk.Checkbutton(self.master, text="Travail de nuit", variable=checkbutton_nuit_var)
+            checkbutton_nuit.grid(row=3, column=i+1, padx=10, pady=5)
+            
+            checkbutton_repos_var = tk.BooleanVar()
+            checkbutton_repos = tk.Checkbutton(self.master, text="Jour de repos", variable=checkbutton_repos_var)
+            checkbutton_repos.grid(row=4, column=i+1, padx=10, pady=5)
+            
+            self.preferences[jour] = {'heures': entry_heures, 'nuit': checkbutton_nuit_var, 'repos': checkbutton_repos_var}
+        
+        self.bouton_generer = tk.Button(self.master, text="Générer", command=self.generer_planning)
+        self.bouton_generer.grid(row=5, column=0, columnspan=len(self.jours)+1, padx=10, pady=5)
+        
+        self.cadre_planning = tk.Frame(self.master)
+        self.cadre_planning.grid(row=6, column=0, columnspan=len(self.jours)+1, padx=10, pady=5)
+        
+    def generer_planning(self):
+        jours_de_repos_selectionnes = [jour for jour, details in self.preferences.items() if details['repos'].get()]
+        if len(jours_de_repos_selectionnes) != 2:
+            messagebox.showerror("Erreur", "Veuillez sélectionner exactement deux jours de repos.")
+            return
+        
+        planning = self.generer_planning_selon_preferences(jours_de_repos_selectionnes)
+        self.afficher_planning(planning)
+        
+    def generer_planning_selon_preferences(self, jours_de_repos):
+        planning = {}
+        heures_totales_semaine = 0
+
+        for jour, details in self.preferences.items():
+            max_heures_travail = int(details['heures'].get())
+            nuit = details['nuit'].get()
+
+            # Contraintes légales
+            max_heures_travail = min(max_heures_travail, 9)  # Limite de 9 heures par jour
+            if nuit:
+                max_heures_travail = min(max_heures_travail, 10)  # Limite de 10 heures pour le travail de nuit
+
+            if max_heures_travail != int(details['heures'].get()):
+                messagebox.showwarning("Avertissement", f"Les préférences pour {jour} dépassent les limites légales. Elles ont été ajustées.")
+
+            heures_totales_semaine += max_heures_travail
+
+            # Génération des plages horaires
+            if nuit:
+                heures_avant_minuit = random.randint(2, 4)  # Heures avant minuit
+                heures_apres_minuit = max_heures_travail - heures_avant_minuit  # Heures après minuit
+
+                heure_debut = random.randint(20, 23 - heures_avant_minuit)  # Heure de début de travail de nuit
+                heure_fin = heure_debut + heures_avant_minuit  # Heure de fin de travail avant minuit
+
+                heure_debut_apres_minuit = 0  # Heure de début de travail après minuit
+                heure_fin_apres_minuit = heure_debut_apres_minuit + heures_apres_minuit  # Heure de fin de travail après minuit
+
+                heures_travail = list(range(heure_debut, heure_fin)) + list(range(heure_debut_apres_minuit, heure_fin_apres_minuit))
+            else:
+                heure_debut = random.randint(8, 19)  # Heure de début de travail de jour aléatoire
+                heure_fin = heure_debut + max_heures_travail  # Heure de fin de travail de jour
+
+                heures_travail = list(range(heure_debut, heure_fin))
+
+            # Ajouter une pause d'une heure toutes les 6 heures consécutives de travail
+            for i in range(6, len(heures_travail), 7):
+                heures_travail.insert(i, heures_travail[i-1]+1)  # Ajouter une heure de pause
+
+            planning[jour] = {'Heures de travail': max_heures_travail, 'Plage horaire': f"{heure_debut}:00 - {heure_fin_apres_minuit}:00"}
+
+            # Ajout des heures de travail pour chaque heure de la journée
+            planning[jour]['Heures'] = set(heures_travail)
+
+        # Vérification des heures totales par semaine
+        if heures_totales_semaine > 45:
+            heures_totales_semaine = 45
+
+        return planning
+
+    
+    def afficher_planning(self, planning):
+        # Nettoyer le tableau précédent
+        for widget in self.cadre_planning.winfo_children():
+            widget.destroy()
+
+        # Afficher les heures de la journée en colonne
+        for heure in range(24):
+            label_heure = tk.Label(self.cadre_planning, text=f"{heure}:00")
+            label_heure.grid(row=heure+1, column=0, padx=5, pady=2, sticky="nsew")
+
+        # Afficher les jours de la semaine en ligne
+        for i, jour in enumerate(self.jours):
+            for heure in range(24):
+                if heure in planning[jour]['Heures']:
+                    couleur = "pink"  # Couleur rose pour les heures de travail
+                else:
+                    couleur = "white"  # Couleur blanche pour les heures de pause
+
+                # Les heures entre la fin de la journée et le début de la suivante ne sont pas colorées
+                if heure == max(planning[jour]['Heures']) + 1:
+                    couleur = "white"
+
+                cadre_cellule = tk.Frame(self.cadre_planning, bg=couleur, width=10, height=2)
+                cadre_cellule.grid(row=heure+1, column=i+1, padx=1, pady=1, sticky="nsew")
+
+        # Afficher le message sur l'emploi du temps
+        message_label = tk.Label(self.master, text="Si l'emploi du temps vous convient, appuyez sur 'Télécharger'. Sinon, appuyez sur 'Générer à nouveau'.")
+        message_label.grid(row=7, column=0, columnspan=len(self.jours)+1, padx=10, pady=5)
+
+        # Ajouter un bouton pour télécharger l'emploi du temps
+        download_button = tk.Button(self.master, text="Télécharger", command=lambda: self.enregistrer_planning_image(planning))
+        download_button.grid(row=8, column=0, columnspan=len(self.jours)+1, padx=10, pady=5)
+
+    def enregistrer_planning_image(self, planning):
+        # Créer une image pour l'emploi du temps
+        largeur_img = 800
+        hauteur_img = 600
+        img = Image.new("RGB", (largeur_img, hauteur_img), "white")
+        draw = ImageDraw.Draw(img)
+
+        # Afficher les heures de la journée en colonne
+        for heure in range(24):
+            draw.text((10, heure*25), f"{heure}:00", fill="black")
+
+        # Afficher les jours de la semaine en ligne
+        for i, jour in enumerate(self.jours):
+            for heure in range(24):
+                if heure in planning[jour]['Heures']:
+                    couleur = "pink"  # Couleur rose pour les heures de travail
+                else:
+                    couleur = "white"  # Couleur blanche pour les heures de pause
+
+                # Les heures entre la fin de la journée et le début de la suivante ne sont pas colorées
+                if heure == max(planning[jour]['Heures']) + 1:
+                    couleur = "white"
+
+                draw.rectangle([((i+1)*100, heure*25), ((i+2)*100, (heure+1)*25)], fill=couleur, outline="black")
+
+        # Demander à l'utilisateur où enregistrer le fichier
+        chemin_fichier = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("Fichiers PNG", "*.png")])
+        if chemin_fichier:
+            # Enregistrer l'image
+            img.save(chemin_fichier)
+    
+def main():
+    root = tk.Tk()
+    app = AppliCalendrier(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
